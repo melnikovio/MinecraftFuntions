@@ -21,7 +21,7 @@ namespace MinecraftFuntions
 
         [FunctionName(@"serversdelete")]
         public static async Task<IActionResult> RunAsync(
-            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "servers/delete")]HttpRequest req,
+            [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "servers")]HttpRequest req,
             TraceWriter log, ExecutionContext context)
         {
             string configFile = Path.Combine(context.FunctionAppDirectory, configPath);
@@ -38,7 +38,7 @@ namespace MinecraftFuntions
             log.Verbose($"name: {name}");
             if (!string.IsNullOrEmpty(name))
             {
-                var result = await DeleteServer(log,name);
+                var result = await DeleteServer(log, name);
                 if (result)
                     return new OkObjectResult($"Server {name} delete succeded");
                 return new OkObjectResult($"Server {name} delete failed");
@@ -53,7 +53,7 @@ namespace MinecraftFuntions
             {
                 await DeleteService(name);
                 await DeleteDeployment(name);                              
-                await DeleteClaim(name + "-storage");
+                await DeleteClaim(name);
                 return true;
             }
             catch (Exception ex) {
@@ -70,13 +70,13 @@ namespace MinecraftFuntions
 
         private static async Task DeleteDeployment(string instanceName, string namespaceParameter = "default")
         {
-            await client.DeleteNamespacedDeployment1WithHttpMessagesAsync(new V1DeleteOptions() , instanceName, namespaceParameter);
-
+           await client.DeleteNamespacedDeployment1WithHttpMessagesAsync(new V1DeleteOptions() , "minecraft-server-" + instanceName, namespaceParameter);
+            
         }
 
         private static async Task DeleteClaim(string claimName, string namespacename = "default")
         {
-            await client.DeleteNamespacedPersistentVolumeClaimWithHttpMessagesAsync(new V1DeleteOptions(), claimName, namespacename);            
+            await client.DeleteNamespacedPersistentVolumeClaimWithHttpMessagesAsync(new V1DeleteOptions(), claimName + "-storage", namespacename);            
         }
     }
 }

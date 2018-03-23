@@ -21,7 +21,7 @@ namespace MinecraftFuntions
         static Kubernetes client;
 
         [FunctionName(@"serversadd")]
-        public static async Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "servers/add")]HttpRequest req,
+        public static async Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Function, "post", Route = "servers")]HttpRequest req,
             TraceWriter log, ExecutionContext context)
         {
             var configFile = Path.Combine(context.FunctionAppDirectory, configPath);
@@ -50,10 +50,10 @@ namespace MinecraftFuntions
         public static async Task<bool> AddServer(TraceWriter log,string name, int replicasCount)
         {
             try {
-                await CreateLabeledClaim("default", name + "-storage");
-                await CreateDeployment(name, name + "-storage", replicasCount);
-                await CreateService(name, name);
-
+                await CreateLabeledClaim(name);
+                await CreateDeployment(name, replicasCount);
+                await CreateService(name);
+                
                 return true;
             }
             catch (Exception ex) {
@@ -63,149 +63,25 @@ namespace MinecraftFuntions
            
         }
 
-        static async Task CreateLabeledClaim(string namespacename, string label, string storageClassName = "azurefile", double sizegb = 30d)
+        static async Task CreateLabeledClaim(string serverName)
         {
-            var claim = new V1PersistentVolumeClaim
-            {
-                ApiVersion = "v1",
-                Kind = "PersistentVolumeClaim",
-                Metadata = new V1ObjectMeta {Name = label},
-                Spec = new V1PersistentVolumeClaimSpec
-                {
-                    AccessModes = new List<string>
-                    {
-                        "ReadWriteMany"
-                    },
-                    StorageClassName = storageClassName,
-                    Resources = new V1ResourceRequirements
-                    {
-                        Requests = new Dictionary<string, ResourceQuantity>
-                        {
-                            {"storage", new ResourceQuantity(sizegb + "Gi")}
-                        }
-                    }
-                }
-            };
-            await client.CreateNamespacedPersistentVolumeClaimWithHttpMessagesAsync(claim, namespacename);         
+            var claim = SpecsFactory.CreateVolumeClaim(serverName);
+            await client.CreateNamespacedPersistentVolumeClaimWithHttpMessagesAsync(claim,"default");         
         }
 
-        public static async Task CreateDeployment(string instanceName, string storageName, int replicasCount = 1, string image = "openhack/minecraft-server:2.0-alpine", string namespaceParameter = "default")
+        public static async Task CreateDeployment(string instanceName,  int replicasCount = 1)
         {
-            var deployment = new Appsv1beta1Deployment
-            {
-                ApiVersion = "apps/v1beta1",
-                Kind = "Deployment",
-                Metadata = new V1ObjectMeta
-                {
-                    Name = instanceName
-                },
-                Spec = new Appsv1beta1DeploymentSpec
-                {
-                    Replicas = replicasCount,
-                    Template = new V1PodTemplateSpec
-                    {
-                        Metadata = new V1ObjectMeta
-                        {
-                            Labels = new Dictionary<string, string> { { "app", instanceName } }
-                        },
-                        Spec = new V1PodSpec
-                        {
-                            Containers = new List<V1Container>
-                            {
-                                new V1Container
-                                {
-                                    Name = instanceName,
-                                    Image = image,
-                                    Env = new List<V1EnvVar>
-                                    {
-                                        new V1EnvVar
-                                        {
-                                            Name = "EULA",
-                                            Value = "true"
-                                        }
-                                    },
-                                    Ports = new List<V1ContainerPort>
-                                    {
-                                        new V1ContainerPort
-                                        {
-                                            ContainerPort = 25565,
-                                            Name = "first-port"
-                                        },
-                                        new V1ContainerPort
-                                        {
-                                            ContainerPort = 25575,
-                                            Name = "second-port"
-                                        }
-                                    },
-                                    VolumeMounts = new List<V1VolumeMount>
-                                    {
-                                        new V1VolumeMount
-                                        {
-                                            Name = "azure",
-                                            MountPath = "/data"
-                                        }
-                                    }
-                                }
-
-                            },
-                            Volumes = new List<V1Volume>
-                            {
-                                new V1Volume("azure",
-                                    persistentVolumeClaim: new V1PersistentVolumeClaimVolumeSource
-                                    {
-                                        ClaimName = storageName
-                                    })
-                            }
-                        }
-
-                    }
-                }
-            };
-            await client.CreateNamespacedDeployment1WithHttpMessagesAsync(deployment, namespaceParameter);            
+            var deployment = SpecsFactory.CreateDeployment(instanceName, replicasCount);
+            await client.CreateNamespacedDeployment1WithHttpMessagesAsync(deployment, "default");            
         }
 
-        static async Task CreateService(string name, string appname /*= "minecraft-server2"*/,
-          int port1 = 25565, int port2 = 25575,
-          string nameport1 = "first-port", string nameport2 = "second-port",
-          string targetport1 = "first-port", string targetport2 = "second-port", string namespacename = "default")
+        static async Task CreateService(string name)
         {
             //if (client == null)
             // throw new ArgumentNullException(nameof(client));
 
-            var service = new V1Service
-            {
-                ApiVersion = "v1",
-                Kind = "Service",
-                Metadata = new V1ObjectMeta
-                {
-                    Name = name
-                },
-                Spec = new V1ServiceSpec
-                {
-                    Type = "LoadBalancer",
-                    Ports = new List<V1ServicePort>
-                    {
-                        new V1ServicePort
-                        {
-                            Port = port1,
-                            Name = nameport1,
-                            TargetPort = targetport1
-                        },
-                        new V1ServicePort
-                        {
-                            Port = port2,
-                            Name = nameport2,
-                            TargetPort = targetport2
-                        }
-                    },
-                    Selector = new Dictionary<string, string>
-                    {
-                        {"app", appname}
-                    }
-                }
-            };
-
-           await client.CreateNamespacedServiceWithHttpMessagesAsync(service, namespacename);
+            var service = SpecsFactory.CreateService(name);
+           await client.CreateNamespacedServiceWithHttpMessagesAsync(service, "default");
         }
 
 
