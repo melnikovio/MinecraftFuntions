@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using k8s;
+using k8s.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
@@ -75,7 +76,7 @@ namespace MinecraftFuntions
 
         private static async Task DeleteClaim(string claimName, string namespacename = "default")
         {
-            await client.DeleteNamespacedPersistentVolumeClaimWithHttpMessagesAsync(null, claimName, namespacename);            
+            await client.DeleteNamespacedPersistentVolumeClaimWithHttpMessagesAsync(new V1DeleteOptions(), claimName, namespacename);            
         }
     }
 }
