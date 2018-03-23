@@ -1,16 +1,17 @@
 ﻿
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Runtime.Serialization.Json;
+using System.Threading.Tasks;
+using k8s;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs.Host;
-using Newtonsoft.Json;
-using k8s;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Runtime.Serialization.Json;
 
 namespace MinecraftFuntions
 {
@@ -45,7 +46,7 @@ namespace MinecraftFuntions
         static string configPath = "config";
 
         [FunctionName(@"servers")]
-        public static async System.Threading.Tasks.Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "servers")]HttpRequest req,
+        public static async Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "servers")]HttpRequest req,
             TraceWriter log, ExecutionContext context)
         {
             string configFile = Path.Combine(context.FunctionAppDirectory, configPath);
@@ -73,13 +74,13 @@ namespace MinecraftFuntions
                 }
             }
 
-            return (ActionResult)new OkObjectResult(result);
+            return new OkObjectResult(result);
         }
 
-        public static async System.Threading.Tasks.Task<MonitoringData> GetMinecraftServerDataAsync(string ip)
+        public static async Task<MonitoringData> GetMinecraftServerDataAsync(string ip)
         {
             MonitoringData monitoringData = new MonitoringData();
-            using (var client = new System.Net.Http.HttpClient())
+            using (var client = new HttpClient())
             {
                 client.DefaultRequestHeaders.Add(HttpRequestHeader.UserAgent.ToString(), "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.2 (KHTML, like Gecko) Chrome/15.0.874.121 Safari/535.2");
                 var stream = client.GetStreamAsync(_urlPrefix + ip);

@@ -1,13 +1,11 @@
 ﻿
 using System.IO;
+using k8s;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs.Host;
-using Newtonsoft.Json;
-using k8s;
-using System.Collections.Generic;
 
 namespace MinecraftFuntions
 {
@@ -27,9 +25,9 @@ namespace MinecraftFuntions
             var client = new Kubernetes(config);
 
             if (client != null)
-                return (ActionResult)new OkObjectResult("Kube online");
+                return new OkObjectResult("Kube online");
 
-            return (ActionResult)new OkObjectResult("Kube offline");
+            return new OkObjectResult("Kube offline");
         }
     }
 }

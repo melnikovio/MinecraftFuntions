@@ -1,87 +1,81 @@
 ﻿
+using System;
 using System.IO;
+using System.Threading.Tasks;
+using k8s;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.WebJobs.Host;
 using Newtonsoft.Json;
-using k8s;
-using System;
 
 namespace MinecraftFuntions
 {
     public static class ServerDelete
     {
-        static string configPath = "config";
+        private static string configPath = "config";
 
-        static Kubernetes client = null;
+        private static Kubernetes client;
 
         [FunctionName(@"serversdelete")]
-        public static async System.Threading.Tasks.Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "servers/delete")]HttpRequest req,
+        public static async Task<IActionResult> RunAsync(
+            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "servers/delete")]HttpRequest req,
             TraceWriter log, ExecutionContext context)
         {
             string configFile = Path.Combine(context.FunctionAppDirectory, configPath);
-            FileInfo file = new FileInfo(configFile);
+            var file = new FileInfo(configFile);
             var config = KubernetesClientConfiguration.BuildConfigFromConfigFile(file);
             client = new Kubernetes(config);
 
             string name = req.Query["name"];
 
             string requestBody = new StreamReader(req.Body).ReadToEnd();
+            log.Verbose($"Request\n{requestBody}");
             dynamic data = JsonConvert.DeserializeObject(requestBody);
             name = name ?? data?.name;
-
+            log.Verbose($"name: {name}");
             if (!string.IsNullOrEmpty(name))
             {
-                var result = DeleteServer(name);
+                var result = await DeleteServer(log,name);
                 if (result)
-                    return (ActionResult)new OkObjectResult($"Server {name} delete succeded");
-                else
-                    return (ActionResult)new OkObjectResult($"Server {name} delete failed");
+                    return new OkObjectResult($"Server {name} delete succeded");
+                return new OkObjectResult($"Server {name} delete failed");
             }
 
             return new BadRequestObjectResult("Please pass a name of server the query string or in the request body");
         }
 
-        public static bool DeleteServer(string name)
+        public static async Task<bool> DeleteServer(TraceWriter log, string name)
         {
             try
             {
-                DeleteDeployment(name);
-                DeleteService(name);
-                
-                DeleteClaim(name + "-storage");
-
+                await DeleteService(name);
+                await DeleteDeployment(name);                              
+                await DeleteClaim(name + "-storage");
                 return true;
             }
             catch (Exception ex) {
+                log.Error("Error",ex);
                 return false;
             }
             
         }
 
-        static void DeleteService(string serviceName, string namespacename = "default")
+        private static async Task DeleteService(string serviceName, string namespacename = "default")
         {
-            client.DeleteNamespacedService(serviceName, namespacename);
+            await client.DeleteNamespacedServiceWithHttpMessagesAsync(serviceName, namespacename);
         }
 
-        static void DeleteDeployment(string instanceName, string namespaceParameter = "default")
+        private static async Task DeleteDeployment(string instanceName, string namespaceParameter = "default")
         {
-            client.DeleteNamespacedDeployment2(new k8s.Models.V1DeleteOptions()
-            {
-                //ApiVersion = "v1",
-                //Kind = "deployments",
-            }, instanceName, namespaceParameter);
+            await client.DeleteNamespacedDeployment1WithHttpMessagesAsync(null, instanceName, namespaceParameter);
+
         }
 
-        static void DeleteClaim(string claimName, string namespacename = "default")
+        private static async Task DeleteClaim(string claimName, string namespacename = "default")
         {
-            client.DeleteNamespacedPersistentVolumeClaim(new k8s.Models.V1DeleteOptions
-            {
-                //ApiVersion = "v1",
-                //Kind = "PersistentVolumeClaim",
-            }, claimName, namespacename);
+            await client.DeleteNamespacedPersistentVolumeClaimWithHttpMessagesAsync(null, claimName, namespacename);            
         }
     }
 }
