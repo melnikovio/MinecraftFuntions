@@ -70,7 +70,7 @@ namespace MinecraftFuntions
 
         private static async Task DeleteDeployment(string instanceName, string namespaceParameter = "default")
         {
-            await client.DeleteNamespacedDeployment1WithHttpMessagesAsync(null, instanceName, namespaceParameter);
+            await client.DeleteNamespacedDeployment1WithHttpMessagesAsync(new V1DeleteOptions() , instanceName, namespaceParameter);
 
         }
 
