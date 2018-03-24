@@ -77,31 +77,44 @@ namespace MinecraftFuntions
             log.Verbose($"deleting deploy: {depName}");
 
             var dep = SpecsFactory.CreateDeployment(instanceName, 0);
-            await client.ReplaceNamespacedDeployment1WithHttpMessagesAsync(dep, depName, "default");
-
-            var res = await client.DeleteNamespacedDeployment3WithHttpMessagesAsync(new V1DeleteOptions() ,
-               "minecraft-server-" + instanceName, namespaceParameter,propagationPolicy:"Background");
-
+            log.Verbose($"emptying replicas for deployment");
+            await client.ReplaceNamespacedDeployment1WithHttpMessagesAsync(dep, depName, "default");           
             var depls =  await client.ReadNamespacedDeployment3WithHttpMessagesAsync(depName,namespaceParameter);
+            log.Verbose($"replicasets found");
             if (depls.Response?.IsSuccessStatusCode??true)
             {
                 var sets =
                     await client.ListReplicaSetForAllNamespaces2WithHttpMessagesAsync(labelSelector: "app="+depName);
                 foreach (var st in sets.Body.Items)
                 {
-                    log.Verbose($"deleting {st.Metadata.Name}");
+                    log.Verbose($"emptying replicas in {st.Metadata.Name}");
                     st.Spec.Replicas = 0;
                     await client.ReplaceNamespacedReplicaSet2WithHttpMessagesAsync(st, st.Metadata.Name,
                         "default");
-                    await client.DeleteNamespacedReplicaSet2WithHttpMessagesAsync(new V1DeleteOptions(), st.Metadata.Name,
-                        "default");
+                    
                 }
+                
+
+                foreach (var name in sets.Body.Items.Select(k=>k.Metadata.Name))
+                {
+                    bool deleted;
+                    do
+                    {
+                        var st2 = await client.ReadNamespacedReplicaSet2WithHttpMessagesAsync(name,
+                            "default");
+                        deleted = st2.Body.Status.ReadyReplicas == 0;
+                    } while (!deleted);
+                    log.Verbose($"replicaset {name} deleted");
+                    await client.DeleteNamespacedReplicaSet2WithHttpMessagesAsync(new V1DeleteOptions(),name,"default");
+                }
+                await client.DeleteNamespacedDeployment3WithHttpMessagesAsync(new V1DeleteOptions(),
+                    "minecraft-server-" + instanceName, namespaceParameter, propagationPolicy: "Background");
             }
             else
             {
                 log.Verbose($"deleted it says");
             }
-           log.Verbose($"{res.Response?.StatusCode} {res.Response?.ReasonPhrase} {res.Response?.Content}"); 
+           log.Verbose($"done"); 
         }
 
         private static async Task DeleteClaim(TraceWriter log, string claimName, string namespacename = "default")
