@@ -20,10 +20,11 @@ namespace MinecraftFuntions
 
         static Kubernetes client;
 
-        [FunctionName(@"serversadd")]
+        [FunctionName(@"serveradd")]
         public static async Task<IActionResult> RunAsync([HttpTrigger(AuthorizationLevel.Function, "post", Route = "servers")]HttpRequest req,
             TraceWriter log, ExecutionContext context)
         {
+            log.Info("Came into.");
             var configFile = Path.Combine(context.FunctionAppDirectory, configPath);
             var file = new FileInfo(configFile);
             var config = KubernetesClientConfiguration.BuildConfigFromConfigFile(file);
@@ -38,7 +39,7 @@ namespace MinecraftFuntions
             replicas = replicas ?? data?.replicas;
             log.Verbose($"name: {name}, replicas{replicas}");
             if (!string.IsNullOrEmpty(name)) {
-                var result = await AddServer(log,"minecraft-server-"+name, int.Parse(replicas));
+                var result = await AddServer(log, name, int.Parse(replicas));
                 if (result)
                     return new OkObjectResult($"Server publish succeded: {name}; Replicas count: {replicas}");
                 return new OkObjectResult($"Server publish failed: {name}; Replicas count: {replicas}");

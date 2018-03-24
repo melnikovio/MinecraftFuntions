@@ -1,6 +1,7 @@
 ﻿
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using k8s;
 using k8s.Models;
@@ -51,9 +52,10 @@ namespace MinecraftFuntions
         {
             try
             {
-                await DeleteService(name);
-                await DeleteDeployment(name);                              
-                await DeleteClaim(name);
+                
+                await DeleteService(log,name);
+                await DeleteDeployment(log,name);                              
+                await DeleteClaim(log,name);
                 return true;
             }
             catch (Exception ex) {
@@ -63,19 +65,48 @@ namespace MinecraftFuntions
             
         }
 
-        private static async Task DeleteService(string serviceName, string namespacename = "default")
+        private static async Task DeleteService(TraceWriter log, string serviceName, string namespacename = "default")
         {
+            log.Verbose($"deleting service: {serviceName}");
             await client.DeleteNamespacedServiceWithHttpMessagesAsync(serviceName, namespacename);
         }
 
-        private static async Task DeleteDeployment(string instanceName, string namespaceParameter = "default")
+        private static async Task DeleteDeployment(TraceWriter log, string instanceName, string namespaceParameter = "default")
         {
-           await client.DeleteNamespacedDeployment1WithHttpMessagesAsync(new V1DeleteOptions() , "minecraft-server-" + instanceName, namespaceParameter);
-            
+            var depName = "minecraft-server-" + instanceName;
+            log.Verbose($"deleting deploy: {depName}");
+
+            var dep = SpecsFactory.CreateDeployment(instanceName, 0);
+            await client.ReplaceNamespacedDeployment1WithHttpMessagesAsync(dep, depName, "default");
+
+            var res = await client.DeleteNamespacedDeployment3WithHttpMessagesAsync(new V1DeleteOptions() ,
+               "minecraft-server-" + instanceName, namespaceParameter,propagationPolicy:"Background");
+
+            var depls =  await client.ReadNamespacedDeployment3WithHttpMessagesAsync(depName,namespaceParameter);
+            if (depls.Response?.IsSuccessStatusCode??true)
+            {
+                var sets =
+                    await client.ListReplicaSetForAllNamespaces2WithHttpMessagesAsync(labelSelector: "app="+depName);
+                foreach (var st in sets.Body.Items)
+                {
+                    log.Verbose($"deleting {st.Metadata.Name}");
+                    st.Spec.Replicas = 0;
+                    await client.ReplaceNamespacedReplicaSet2WithHttpMessagesAsync(st, st.Metadata.Name,
+                        "default");
+                    await client.DeleteNamespacedReplicaSet2WithHttpMessagesAsync(new V1DeleteOptions(), st.Metadata.Name,
+                        "default");
+                }
+            }
+            else
+            {
+                log.Verbose($"deleted it says");
+            }
+           log.Verbose($"{res.Response?.StatusCode} {res.Response?.ReasonPhrase} {res.Response?.Content}"); 
         }
 
-        private static async Task DeleteClaim(string claimName, string namespacename = "default")
+        private static async Task DeleteClaim(TraceWriter log, string claimName, string namespacename = "default")
         {
+            log.Verbose($"deleting claim: {claimName + "-storage"}");
             await client.DeleteNamespacedPersistentVolumeClaimWithHttpMessagesAsync(new V1DeleteOptions(), claimName + "-storage", namespacename);            
         }
     }
